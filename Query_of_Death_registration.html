@@ -1,0 +1,731 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Query of Death: Debugging a Murder | Classified Dossier</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Oswald:wght@500;700&family=Space+Mono:ital,wght@0,400;0,700;1,400&display=swap" rel="stylesheet">
+    
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        'sans': ['Oswald', 'sans-serif'],
+                        'mono': ['Space Mono', 'monospace'],
+                    },
+                    colors: {
+                        brand: {
+                            black: '#0a0a0a',
+                            dark: '#121212',
+                            gray: '#2a2a2a',
+                            red: '#cc0000',
+                            brightRed: '#ff0033',
+                            darkRed: '#4a0000'
+                        }
+                    },
+                    backgroundImage: {
+                        'scanlines': 'linear-gradient(to bottom, rgba(255,255,255,0), rgba(255,255,255,0) 50%, rgba(0,0,0,0.2) 50%, rgba(0,0,0,0.2))',
+                        'danger-stripes': 'repeating-linear-gradient(45deg, #cc0000, #cc0000 10px, #0a0a0a 10px, #0a0a0a 20px)'
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        body {
+            background-color: #050505;
+            color: #e5e5e5;
+            background-image: 
+                radial-gradient(circle at 50% 0%, #2a0000 0%, transparent 50%),
+                linear-gradient(rgba(10, 10, 10, 0.9), rgba(10, 10, 10, 0.9));
+            background-attachment: fixed;
+        }
+        
+        .scanline-overlay {
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background-size: 100% 4px;
+            pointer-events: none;
+            z-index: 50;
+            opacity: 0.15;
+        }
+
+        .glitch-text {
+            position: relative;
+            text-shadow: 0.05em 0 0 rgba(255,0,0,0.75),
+                        -0.025em -0.05em 0 rgba(0,255,0,0.75),
+                        0.025em 0.05em 0 rgba(0,0,255,0.75);
+            animation: glitch 500ms infinite;
+        }
+
+        @keyframes glitch {
+            0% { text-shadow: 0.05em 0 0 rgba(255,0,51,0.75), -0.05em -0.025em 0 rgba(0,0,0,0.75), -0.025em 0.05em 0 rgba(204,0,0,0.75); }
+            14% { text-shadow: 0.05em 0 0 rgba(255,0,51,0.75), -0.05em -0.025em 0 rgba(0,0,0,0.75), -0.025em 0.05em 0 rgba(204,0,0,0.75); }
+            15% { text-shadow: -0.05em -0.025em 0 rgba(255,0,51,0.75), 0.025em 0.025em 0 rgba(0,0,0,0.75), -0.05em -0.05em 0 rgba(204,0,0,0.75); }
+            49% { text-shadow: -0.05em -0.025em 0 rgba(255,0,51,0.75), 0.025em 0.025em 0 rgba(0,0,0,0.75), -0.05em -0.05em 0 rgba(204,0,0,0.75); }
+            50% { text-shadow: 0.025em 0.05em 0 rgba(255,0,51,0.75), 0.05em 0 0 rgba(0,0,0,0.75), 0 -0.05em 0 rgba(204,0,0,0.75); }
+            99% { text-shadow: 0.025em 0.05em 0 rgba(255,0,51,0.75), 0.05em 0 0 rgba(0,0,0,0.75), 0 -0.05em 0 rgba(204,0,0,0.75); }
+            100% { text-shadow: -0.025em 0 0 rgba(255,0,51,0.75), -0.025em -0.025em 0 rgba(0,0,0,0.75), -0.025em -0.05em 0 rgba(204,0,0,0.75); }
+        }
+
+        .neon-border {
+            box-shadow: 0 0 10px rgba(255, 0, 51, 0.2), inset 0 0 10px rgba(255, 0, 51, 0.1);
+            border: 1px solid rgba(255, 0, 51, 0.3);
+        }
+
+        .typing-effect {
+            border-right: 2px solid #ff0033;
+            white-space: nowrap;
+            overflow: hidden;
+            animation: typing 3s steps(40, end), blink-caret .75s step-end infinite;
+        }
+
+        /* 3D Tesseract CSS */
+        .tesseract-wrapper {
+            perspective: 800px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            width: 100px;
+            height: 100px;
+        }
+        .tesseract {
+            position: relative;
+            width: 100px;
+            height: 100px;
+            transform-style: preserve-3d;
+            animation: rotate-tesseract 12s linear infinite;
+        }
+        .cube {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            transform-style: preserve-3d;
+        }
+        .inner-cube {
+            transform: scale3d(0.5, 0.5, 0.5);
+        }
+        .face {
+            position: absolute;
+            width: 100px;
+            height: 100px;
+            border: 2px solid #ff0033;
+            background: rgba(255, 0, 51, 0.05);
+            box-shadow: 0 0 15px rgba(255, 0, 51, 0.3), inset 0 0 15px rgba(255, 0, 51, 0.3);
+        }
+        .cube .front  { transform: translateZ(50px); }
+        .cube .back   { transform: rotateY(180deg) translateZ(50px); }
+        .cube .right  { transform: rotateY(90deg) translateZ(50px); }
+        .cube .left   { transform: rotateY(-90deg) translateZ(50px); }
+        .cube .top    { transform: rotateX(90deg) translateZ(50px); }
+        .cube .bottom { transform: rotateX(-90deg) translateZ(50px); }
+
+        @keyframes rotate-tesseract {
+            0% { transform: rotateX(0deg) rotateY(0deg) rotateZ(0deg); }
+            100% { transform: rotateX(360deg) rotateY(360deg) rotateZ(360deg); }
+        }
+
+        @keyframes typing { from { width: 0 } to { width: 100% } }
+        @keyframes blink-caret { from, to { border-color: transparent } 50% { border-color: #ff0033; } }
+
+        @media print {
+            body { 
+                background: #000 !important; 
+                color: #fff !important; 
+                -webkit-print-color-adjust: exact;
+                print-color-adjust: exact;
+            }
+            .scanline-overlay, .print-hide { display: none !important; }
+            .neon-border { box-shadow: none !important; border: 2px solid #cc0000 !important; }
+            .glitch-text { text-shadow: none !important; animation: none !important; color: #ff0033 !important; }
+        }
+    </style>
+</head>
+<body class="font-mono selection:bg-brand-brightRed selection:text-white min-h-screen relative pb-20">
+
+    <!-- Scanline effect for aesthetic -->
+    <div class="scanline-overlay bg-scanlines"></div>
+
+    <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 pt-12 relative z-10">
+        
+        <!-- Header / Hero Section -->
+        <header class="text-center mb-16 relative">
+            <div class="absolute top-0 left-1/2 -translate-x-1/2 w-full h-32 bg-brand-red opacity-10 blur-[100px] rounded-full"></div>
+            
+            <!-- Organizer Logos & Tesseract Theme-->
+            <div class="flex justify-between items-center w-full max-w-5xl mx-auto mb-10 relative z-20 px-4 print-hide">
+                
+                <!-- VIT Chennai Image Logo -->
+                <div class="flex items-center gap-3">
+                    <img src="https://chennai.vit.ac.in/files/icbcc2022/images/index/VIT%20LOGO%20transparent.png" alt="VIT Chennai" class="h-16 md:h-20 object-contain drop-shadow-[0_0_10px_rgba(255,255,255,0.2)]" style="filter: brightness(0) invert(1);" onerror="this.onerror=null; this.src='https://placehold.co/200x80/0a0a0a/ffffff?text=VIT+CHENNAI&font=oswald';">
+                </div>
+                
+                <!-- Header Tesseract Theme Core -->
+                <div class="flex items-center gap-2 bg-brand-darkRed/20 border border-brand-red/30 pr-5 pl-1 py-1 rounded-lg shadow-[0_0_15px_rgba(255,0,51,0.2)] backdrop-blur">
+                    <!-- Scaled down 3D CSS Tesseract -->
+                    <div class="relative w-16 h-16 flex items-center justify-center overflow-visible">
+                        <div class="tesseract-wrapper scale-[0.45] origin-center absolute">
+                            <div class="tesseract">
+                                <div class="cube">
+                                    <div class="face front"></div><div class="face back"></div>
+                                    <div class="face right"></div><div class="face left"></div>
+                                    <div class="face top"></div><div class="face bottom"></div>
+                                </div>
+                                <div class="cube inner-cube">
+                                    <div class="face front"></div><div class="face back"></div>
+                                    <div class="face right"></div><div class="face left"></div>
+                                    <div class="face top"></div><div class="face bottom"></div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="text-brand-brightRed font-bold font-sans tracking-widest leading-tight text-right z-10">
+                        TESSERACT
+                    </div>
+                </div>
+
+            </div>
+            
+            <div class="inline-flex items-center gap-2 px-4 py-1 rounded-full border border-brand-red bg-brand-darkRed/30 text-brand-brightRed text-sm mb-6 uppercase tracking-widest font-bold">
+                <i data-lucide="shield-alert" class="w-4 h-4"></i>
+                Classified Investigative Protocol // Entry Level: Red
+            </div>
+            
+            <!-- Updated Title -->
+            <h1 class="font-sans text-5xl md:text-7xl font-bold text-white mb-4 tracking-tighter uppercase glitch-text leading-none">
+                QUERY OF DEATH:<br/>
+                <span class="text-brand-brightRed text-4xl md:text-6xl mt-2 block">DEBUGGING A MURDER</span>
+            </h1>
+            
+            <div class="flex justify-center mt-6">
+                <p class="text-xl md:text-2xl text-gray-400 italic border-l-4 border-brand-brightRed pl-4 text-left max-w-2xl font-sans">
+                    "The data never lies. People do."
+                </p>
+            </div>
+        </header>
+
+        <!-- The Premise -->
+        <section class="mb-16 neon-border bg-brand-dark/80 p-6 md:p-10 rounded-lg relative overflow-hidden group">
+            <div class="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
+                <i data-lucide="box" class="w-32 h-32 text-brand-brightRed"></i>
+            </div>
+            <div class="relative z-10 max-w-4xl">
+                <h2 class="text-brand-brightRed font-bold text-2xl mb-4 flex items-center gap-2">
+                    <i data-lucide="terminal" class="w-6 h-6"></i> SYSTEM_LOG // INCIDENT_REPORT
+                </h2>
+                <p class="text-lg leading-relaxed text-gray-300">
+                    <span class="text-white font-bold">DATE:</span> March 25th, 2026<br>
+                    <span class="text-white font-bold">STATUS:</span> A high-profile terminal at the Central Server was breached. A lead developer is dead, and the only witness is a massive, corrupted dataset. 
+                </p>
+                <p class="mt-4 text-brand-brightRed font-bold text-xl uppercase tracking-wider">
+                    We don't need police; we need Data Forensics.
+                </p>
+            </div>
+        </section>
+
+        <!-- 3-Column Info Grid -->
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-16">
+            
+            <!-- Objective -->
+            <div class="bg-brand-dark neon-border rounded-lg p-6 border-t-4 border-t-brand-brightRed">
+                <div class="flex items-center gap-3 mb-4">
+                    <div class="p-2 bg-brand-darkRed/50 rounded text-brand-brightRed">
+                        <i data-lucide="crosshair" class="w-6 h-6"></i>
+                    </div>
+                    <h3 class="text-xl font-bold font-sans tracking-wide text-white uppercase">I. Mission Objective</h3>
+                </div>
+                <p class="text-sm text-gray-400 leading-relaxed">
+                    You are not "participants"; you are Digital Forensic Specialists. Your mission is to navigate through layers of obfuscated code to find the <span class="text-brand-brightRed font-bold">"Smoking Gun"</span> hidden in the rows.
+                </p>
+            </div>
+
+            <!-- Squad -->
+            <div class="bg-brand-dark neon-border rounded-lg p-6 border-t-4 border-t-brand-brightRed">
+                <div class="flex items-center gap-3 mb-4">
+                    <div class="p-2 bg-brand-darkRed/50 rounded text-brand-brightRed">
+                        <i data-lucide="users" class="w-6 h-6"></i>
+                    </div>
+                    <h3 class="text-xl font-bold font-sans tracking-wide text-white uppercase">II. Specialist Squad</h3>
+                </div>
+                <ul class="text-sm text-gray-400 space-y-3">
+                    <li class="flex items-start gap-2">
+                        <i data-lucide="chevron-right" class="w-4 h-4 text-brand-brightRed mt-0.5"></i>
+                        <span><strong class="text-white">Unit Size:</strong> 2–3 Agents.</span>
+                    </li>
+                    <li class="flex items-start gap-2">
+                        <i data-lucide="chevron-right" class="w-4 h-4 text-brand-brightRed mt-0.5"></i>
+                        <span><strong class="text-white">Credentials:</strong> Valid College ID (Your badge).</span>
+                    </li>
+                    <li class="flex items-start gap-2">
+                        <i data-lucide="chevron-right" class="w-4 h-4 text-brand-brightRed mt-0.5"></i>
+                        <span><strong class="text-white">Entry Fee:</strong> ₹149 per Agent.</span>
+                    </li>
+                    <li class="flex items-start gap-2">
+                        <i data-lucide="chevron-right" class="w-4 h-4 text-brand-brightRed mt-0.5"></i>
+                        <span><strong class="text-white">Skillset:</strong> Proficiency in Python (Pandas, NumPy).</span>
+                    </li>
+                </ul>
+            </div>
+
+            <!-- Toolkit -->
+            <div class="bg-brand-dark neon-border rounded-lg p-6 border-t-4 border-t-brand-brightRed">
+                <div class="flex items-center gap-3 mb-4">
+                    <div class="p-2 bg-brand-darkRed/50 rounded text-brand-brightRed">
+                        <i data-lucide="wrench" class="w-6 h-6"></i>
+                    </div>
+                    <h3 class="text-xl font-bold font-sans tracking-wide text-white uppercase">III. Forensic Toolkit</h3>
+                </div>
+                <ul class="text-sm text-gray-400 space-y-2">
+                    <li><strong class="text-white">Engine:</strong> Python 3.x (Pandas, NumPy, Re)</li>
+                    <li><strong class="text-white">Env:</strong> Jupyter / VS Code (Offline)</li>
+                    <li><strong class="text-white">Evidence:</strong> Pre-loaded .csv files</li>
+                    <li class="mt-2 pt-2 border-t border-brand-gray text-brand-brightRed">
+                        <strong>THE BLACKOUT:</strong> Zero Internet. Your only resources are logic and the <code class="bg-black px-1 py-0.5 rounded text-xs text-white">help()</code> function.
+                    </li>
+                </ul>
+            </div>
+        </div>
+
+        <!-- Investigation Phases -->
+        <div class="mb-16">
+            <h2 class="text-3xl font-bold font-sans text-white mb-8 border-b border-brand-gray pb-4 flex items-center gap-3 uppercase">
+                <i data-lucide="search" class="w-8 h-8 text-brand-brightRed"></i>
+                IV. The Investigation Phases
+            </h2>
+            
+            <div class="space-y-6">
+                <!-- Phase 1 -->
+                <div class="relative pl-8 md:pl-0">
+                    <div class="md:hidden absolute left-0 top-0 bottom-0 w-0.5 bg-brand-gray"></div>
+                    <div class="bg-brand-dark border border-brand-gray hover:border-brand-red transition-colors p-6 rounded-lg ml-4 md:ml-0 md:flex items-start gap-6 group">
+                        <div class="md:w-48 flex-shrink-0 mb-4 md:mb-0">
+                            <div class="text-brand-brightRed font-bold text-xl uppercase tracking-wider">PHASE 1</div>
+                            <div class="text-white font-sans text-2xl font-bold">Crime Scene</div>
+                            <div class="text-brand-red text-sm flex items-center gap-1 mt-1"><i data-lucide="timer" class="w-4 h-4"></i> 30 Minutes</div>
+                        </div>
+                        <div class="flex-grow">
+                            <p class="text-white italic mb-3 font-sans text-lg border-l-2 border-brand-gray pl-3">“The logs are a mess. Filter the noise.”</p>
+                            <p class="text-sm text-gray-400 mb-2"><strong class="text-white">Task:</strong> Basic data manipulation (Filtering, sorting, aggregation).</p>
+                            <div class="bg-black p-3 rounded text-xs text-brand-brightRed border border-brand-gray font-mono mt-3">
+                                <span class="text-gray-500">// Example Clue:</span><br>
+                                "The killer accessed the server between 02:00 and 03:00 AM from an IP address ending in .42. Find the Username."
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Phase 2 -->
+                <div class="relative pl-8 md:pl-0">
+                    <div class="md:hidden absolute left-0 top-0 bottom-0 w-0.5 bg-brand-gray"></div>
+                    <div class="bg-brand-dark border border-brand-gray hover:border-brand-red transition-colors p-6 rounded-lg ml-4 md:ml-0 md:flex items-start gap-6 group">
+                        <div class="md:w-48 flex-shrink-0 mb-4 md:mb-0">
+                            <div class="text-brand-brightRed font-bold text-xl uppercase tracking-wider">PHASE 2</div>
+                            <div class="text-white font-sans text-2xl font-bold">Digital Trail</div>
+                            <div class="text-brand-red text-sm flex items-center gap-1 mt-1"><i data-lucide="timer" class="w-4 h-4"></i> 40 Minutes</div>
+                        </div>
+                        <div class="flex-grow">
+                            <p class="text-white italic mb-3 font-sans text-lg border-l-2 border-brand-gray pl-3">“Follow the money. Follow the messages.”</p>
+                            <p class="text-sm text-gray-400 mb-2"><strong class="text-white">Task:</strong> Merging datasets (Employee Records + Keycard Logs + Transactions).</p>
+                            <div class="bg-black p-3 rounded text-xs text-brand-brightRed border border-brand-gray font-mono mt-3">
+                                <span class="text-gray-500">// Example Clue:</span><br>
+                                "The suspect purchased a 'Strange Tool' using a credit card appearing in the 'Security Breach' table. Find transaction ID."
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Phase 3 -->
+                <div class="relative pl-8 md:pl-0">
+                    <div class="md:hidden absolute left-0 top-0 bottom-0 w-0.5 bg-brand-gray"></div>
+                    <div class="bg-brand-dark border border-brand-brightRed shadow-[0_0_15px_rgba(255,0,51,0.2)] p-6 rounded-lg ml-4 md:ml-0 md:flex items-start gap-6">
+                        <div class="md:w-48 flex-shrink-0 mb-4 md:mb-0">
+                            <div class="text-brand-brightRed font-bold text-xl uppercase tracking-wider glitch-text">PHASE 3</div>
+                            <div class="text-white font-sans text-2xl font-bold">Final Verdict</div>
+                            <div class="text-brand-red text-sm flex items-center gap-1 mt-1"><i data-lucide="timer" class="w-4 h-4"></i> 45 Minutes</div>
+                        </div>
+                        <div class="flex-grow">
+                            <p class="text-white italic mb-3 font-sans text-lg border-l-2 border-brand-brightRed pl-3">“Connect the dots or the killer walks.”</p>
+                            <p class="text-sm text-gray-400 mb-2"><strong class="text-white">Task:</strong> Complex logic & anomaly detection (Pivot tables, multi-conditional logic).</p>
+                            <div class="bg-black p-3 rounded text-xs text-brand-brightRed border border-brand-darkRed font-mono mt-3">
+                                <span class="text-gray-500">// Example Clue:</span><br>
+                                "Find the only person whose location history overlaps with the victim's exactly 3 times, but has no HR digital footprint."
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Rules & Evaluation Grid -->
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-16">
+            
+            <!-- Code of Conduct -->
+            <div>
+                <h2 class="text-2xl font-bold font-sans text-white mb-6 flex items-center gap-2 uppercase">
+                    <i data-lucide="scale" class="text-brand-brightRed w-6 h-6"></i> V. Code of Conduct
+                </h2>
+                <div class="bg-brand-dark border border-brand-gray rounded-lg p-1">
+                    <div class="bg-black p-5 rounded space-y-4">
+                        <div class="flex gap-3">
+                            <i data-lucide="code-2" class="w-5 h-5 text-brand-brightRed shrink-0"></i>
+                            <div>
+                                <h4 class="text-white font-bold uppercase text-sm">Code-Only Proof</h4>
+                                <p class="text-xs text-gray-400 mt-1">No guessing. Answers are only valid if outputted directly by a Python script.</p>
+                            </div>
+                        </div>
+                        <div class="flex gap-3">
+                            <i data-lucide="mic-off" class="w-5 h-5 text-brand-brightRed shrink-0"></i>
+                            <div>
+                                <h4 class="text-white font-bold uppercase text-sm">Radio Silence</h4>
+                                <p class="text-xs text-gray-400 mt-1">No communication outside your assigned squad.</p>
+                            </div>
+                        </div>
+                        <div class="flex gap-3">
+                            <i data-lucide="smartphone-off" class="w-5 h-5 text-brand-brightRed shrink-0"></i>
+                            <div>
+                                <h4 class="text-white font-bold uppercase text-sm">No Outside Intel</h4>
+                                <p class="text-xs text-gray-400 mt-1">Mobile devices and flash drives must be surrendered at the door.</p>
+                            </div>
+                        </div>
+                        <div class="flex gap-3">
+                            <i data-lucide="gavel" class="w-5 h-5 text-brand-brightRed shrink-0"></i>
+                            <div>
+                                <h4 class="text-white font-bold uppercase text-sm">Final Authority</h4>
+                                <p class="text-xs text-gray-400 mt-1">The Lead Investigators (Judges) hold absolute power over the case file.</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Dossier Evaluation -->
+            <div>
+                <h2 class="text-2xl font-bold font-sans text-white mb-6 flex items-center gap-2 uppercase">
+                    <i data-lucide="bar-chart-2" class="text-brand-brightRed w-6 h-6"></i> VI. Dossier Evaluation
+                </h2>
+                <div class="space-y-4">
+                    <div class="bg-brand-dark p-4 rounded border-l-4 border-brand-brightRed">
+                        <div class="flex justify-between items-center mb-1">
+                            <h4 class="text-white font-bold tracking-wide uppercase">Accuracy</h4>
+                            <span class="text-brand-brightRed font-bold">60%</span>
+                        </div>
+                        <p class="text-xs text-gray-400">Did your code return the exact value requested in the clue?</p>
+                        <div class="w-full bg-black h-1.5 mt-2 rounded-full overflow-hidden">
+                            <div class="bg-brand-brightRed h-full w-[60%]"></div>
+                        </div>
+                    </div>
+                    
+                    <div class="bg-brand-dark p-4 rounded border-l-4 border-brand-red">
+                        <div class="flex justify-between items-center mb-1">
+                            <h4 class="text-white font-bold tracking-wide uppercase">Code Elegance</h4>
+                            <span class="text-brand-red font-bold">20%</span>
+                        </div>
+                        <p class="text-xs text-gray-400">Is your script readable? Are your variable names clear?</p>
+                        <div class="w-full bg-black h-1.5 mt-2 rounded-full overflow-hidden">
+                            <div class="bg-brand-red h-full w-[20%]"></div>
+                        </div>
+                    </div>
+
+                    <div class="bg-brand-dark p-4 rounded border-l-4 border-brand-red">
+                        <div class="flex justify-between items-center mb-1">
+                            <h4 class="text-white font-bold tracking-wide uppercase">Speed</h4>
+                            <span class="text-brand-red font-bold">20%</span>
+                        </div>
+                        <p class="text-xs text-gray-400">The clock is ticking. In forensics, the first to the truth wins.</p>
+                        <div class="w-full bg-black h-1.5 mt-2 rounded-full overflow-hidden">
+                            <div class="bg-brand-red h-full w-[20%]"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+
+        <!-- Termination (Danger Zone) -->
+        <div class="mb-16 rounded-lg overflow-hidden border-2 border-brand-brightRed relative bg-brand-dark">
+            <div class="h-2 w-full bg-danger-stripes"></div>
+            <div class="p-6 md:p-8 relative">
+                <i data-lucide="alert-triangle" class="absolute right-[-20px] top-[-20px] w-64 h-64 text-brand-red opacity-10 pointer-events-none"></i>
+                <h2 class="text-3xl font-bold font-sans text-brand-brightRed mb-6 uppercase flex items-center gap-3">
+                    VII. Termination Grounds
+                </h2>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+                    <div class="flex gap-3 bg-black/50 p-3 rounded border border-brand-darkRed">
+                        <i data-lucide="x-octagon" class="w-5 h-5 text-brand-brightRed shrink-0 mt-0.5"></i>
+                        <div>
+                            <strong class="text-white block mb-1">HARD-CODING</strong>
+                            <span class="text-gray-400">Entering the answer manually without writing a valid query.</span>
+                        </div>
+                    </div>
+                    <div class="flex gap-3 bg-black/50 p-3 rounded border border-brand-darkRed">
+                        <i data-lucide="database-zap" class="w-5 h-5 text-brand-brightRed shrink-0 mt-0.5"></i>
+                        <div>
+                            <strong class="text-white block mb-1">DATA TAMPERING</strong>
+                            <span class="text-gray-400">Modifying original .csv files to "force" an answer.</span>
+                        </div>
+                    </div>
+                    <div class="flex gap-3 bg-black/50 p-3 rounded border border-brand-darkRed">
+                        <i data-lucide="eye" class="w-5 h-5 text-brand-brightRed shrink-0 mt-0.5"></i>
+                        <div>
+                            <strong class="text-white block mb-1">ESPIONAGE</strong>
+                            <span class="text-gray-400">Peeking at another squad's terminal or logic.</span>
+                        </div>
+                    </div>
+                    <div class="flex gap-3 bg-black/50 p-3 rounded border border-brand-darkRed">
+                        <i data-lucide="wifi-off" class="w-5 h-5 text-brand-brightRed shrink-0 mt-0.5"></i>
+                        <div>
+                            <strong class="text-white block mb-1">SIGNAL INTERCEPTION</strong>
+                            <span class="text-gray-400">Accessing the web or external documentation.</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="h-2 w-full bg-danger-stripes"></div>
+        </div>
+
+        <!-- Official Registration -->
+        <section class="mb-16 neon-border bg-black border border-brand-red p-6 md:p-10 rounded-lg relative">
+            <h2 class="text-3xl font-bold font-sans text-brand-brightRed mb-8 uppercase flex items-center gap-3 border-b border-brand-darkRed pb-4">
+                <i data-lucide="clipboard-signature" class="w-8 h-8"></i>
+                VIII. Official Registration
+            </h2>
+            
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-10 items-center">
+                <!-- QR Code Side -->
+                <div class="flex flex-col items-center justify-center p-6 bg-brand-dark rounded-lg border border-brand-gray text-center h-full relative overflow-hidden group">
+                    <div class="absolute inset-0 bg-brand-brightRed/5 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none"></div>
+                    <div class="p-2 bg-brand-darkRed/50 rounded mb-4 border border-brand-red relative z-10">
+                        <img src="https://img.sanishtech.com/u/7754f095edb220f395982f8e61aad996.png" alt="Registration QR Code" class="w-64 h-64 object-contain rounded shadow-[0_0_15px_rgba(255,0,0,0.5)] transition-transform transform group-hover:scale-105 duration-300" onerror="this.src='https://placehold.co/400x400/0a0a0a/ff0033?text=SCAN+TO+REGISTER'">
+                    </div>
+                    <h3 class="text-white font-bold font-sans text-xl tracking-wide relative z-10">SECURE LINK TRANSMISSION</h3>
+                    <p class="text-sm text-gray-400 mt-2 relative z-10">Scan the encrypted matrix above to access the primary registration mainframe via your mobile device.</p>
+                    <div class="mt-5 px-4 py-2 bg-brand-brightRed/10 border border-brand-brightRed rounded text-brand-brightRed font-bold tracking-widest relative z-10 flex items-center gap-2">
+                        <i data-lucide="ticket" class="w-5 h-5"></i> REGISTRATION FEE: ₹149
+                    </div>
+                </div>
+
+                <!-- Web Form Side -->
+                <div class="space-y-4 bg-brand-dark p-6 rounded-lg border border-brand-gray h-full">
+                    <h3 class="text-white font-bold font-sans text-xl tracking-wide mb-4">OR INITIALIZE DIRECT REGISTRATION</h3>
+                    <form onsubmit="event.preventDefault(); document.getElementById('reg-success').classList.remove('hidden'); this.reset();" class="space-y-4">
+                        <div>
+                            <label class="block text-brand-brightRed text-xs font-bold mb-1 uppercase tracking-wider">Agent Designation (Name)</label>
+                            <input type="text" required class="w-full bg-black border border-brand-gray focus:border-brand-brightRed text-white p-3 rounded focus:outline-none focus:ring-1 focus:ring-brand-brightRed transition-colors" placeholder="Enter full name...">
+                        </div>
+                        <div>
+                            <label class="block text-brand-brightRed text-xs font-bold mb-1 uppercase tracking-wider">Comms Channel (Email)</label>
+                            <input type="email" required class="w-full bg-black border border-brand-gray focus:border-brand-brightRed text-white p-3 rounded focus:outline-none focus:ring-1 focus:ring-brand-brightRed transition-colors" placeholder="Enter email address...">
+                        </div>
+                        <div>
+                            <label class="block text-brand-brightRed text-xs font-bold mb-1 uppercase tracking-wider">Squad Name (Optional)</label>
+                            <input type="text" class="w-full bg-black border border-brand-gray focus:border-brand-brightRed text-white p-3 rounded focus:outline-none focus:ring-1 focus:ring-brand-brightRed transition-colors" placeholder="Enter team name...">
+                        </div>
+                        <button type="submit" class="w-full bg-brand-darkRed hover:bg-brand-brightRed text-white font-bold py-3 rounded transition-colors uppercase tracking-widest border border-brand-red flex justify-center items-center gap-2 print-hide">
+                            <i data-lucide="upload-cloud" class="w-5 h-5"></i> Submit Credentials
+                        </button>
+                        <div id="reg-success" class="hidden mt-4 p-3 bg-green-900/30 border border-green-500 text-green-400 text-xs text-center rounded">
+                            CREDENTIALS ACCEPTED. WELCOME TO THE SQUAD.
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </section>
+
+        <!-- Encrypted FAQ -->
+        <section class="bg-black border border-brand-gray p-6 md:p-8 rounded-lg relative neon-border">
+            <h2 class="text-2xl font-bold font-sans text-white mb-6 uppercase flex items-center gap-2">
+                <i data-lucide="file-question" class="text-brand-brightRed w-6 h-6"></i> IX. Encrypted FAQ
+            </h2>
+            <div class="space-y-6">
+                
+                <div class="border-b border-brand-gray/50 pb-4">
+                    <h4 class="text-brand-brightRed font-bold flex items-center gap-2 mb-2">
+                        <span class="bg-brand-darkRed text-white px-2 py-0.5 rounded text-xs">Q</span>
+                        Can we use SQL?
+                    </h4>
+                    <p class="text-gray-400 text-sm pl-8">You may use Python libraries like <code class="text-white">pandasql</code> or <code class="text-white">sqlite3</code> if you prefer SQL syntax, but the final execution must happen within the Python environment.</p>
+                </div>
+
+                <div class="border-b border-brand-gray/50 pb-4">
+                    <h4 class="text-brand-brightRed font-bold flex items-center gap-2 mb-2">
+                        <span class="bg-brand-darkRed text-white px-2 py-0.5 rounded text-xs">Q</span>
+                        What if the dataset is too big to open in Excel?
+                    </h4>
+                    <p class="text-gray-400 text-sm pl-8">That's why you're using Python. Real evidence doesn't fit in a spreadsheet.</p>
+                </div>
+
+                <div>
+                    <h4 class="text-brand-brightRed font-bold flex items-center gap-2 mb-2">
+                        <span class="bg-brand-darkRed text-white px-2 py-0.5 rounded text-xs">Q</span>
+                        Will there be a "Red Herring"?
+                    </h4>
+                    <p class="text-gray-400 text-sm pl-8">Expect them. Not every clue leads to the killer. <strong class="text-white italic">Trust your code, not your gut.</strong></p>
+                </div>
+
+            </div>
+        </section>
+
+        <!-- Footer Call to Action -->
+        <footer class="mt-20 text-center print-hide">
+            <button id="init-terminal-btn" class="bg-brand-brightRed text-white font-sans font-bold text-2xl uppercase px-12 py-4 rounded hover:bg-white hover:text-brand-brightRed transition-all shadow-[0_0_20px_rgba(255,0,51,0.5)] transform hover:scale-105 active:scale-95 flex items-center gap-3 mx-auto">
+                <i data-lucide="power" class="w-6 h-6"></i> Initialize AI Terminal
+            </button>
+            <p class="mt-6 text-brand-red text-sm font-mono uppercase tracking-widest">
+                // System awaits authentication //
+            </p>
+        </footer>
+
+    </div>
+
+    <!-- AI Terminal Modal -->
+    <div id="ai-terminal" class="hidden fixed inset-0 bg-black/95 z-[100] flex flex-col font-mono p-4 md:p-10 backdrop-blur-sm print-hide">
+        <div class="border border-brand-brightRed shadow-[0_0_15px_rgba(255,0,51,0.3)] bg-brand-dark flex-grow flex flex-col rounded-lg overflow-hidden max-w-5xl w-full mx-auto relative">
+            
+            <!-- Terminal Header -->
+            <div class="bg-brand-darkRed px-4 py-3 flex justify-between items-center border-b border-brand-brightRed">
+                <span class="text-white font-bold flex items-center gap-2">
+                    <i data-lucide="cpu" class="w-5 h-5 text-brand-brightRed"></i> CHIEF_INVESTIGATOR_AI_v2.5
+                </span>
+                <button id="close-terminal-btn" class="text-gray-400 hover:text-white transition-colors"><i data-lucide="x-square" class="w-6 h-6"></i></button>
+            </div>
+            
+            <!-- Chat Log -->
+            <div id="chat-log" class="flex-grow overflow-y-auto p-4 space-y-4 text-sm md:text-base whitespace-pre-wrap"></div>
+            
+            <!-- LLM Quick Actions -->
+            <div class="px-4 py-3 flex flex-wrap gap-2 border-t border-brand-gray/50 bg-black/50">
+                 <button onclick="sendQuickAction('Generate a practice Pandas crime scene data snippet. ✨')" class="bg-brand-dark border border-brand-gray hover:border-brand-brightRed text-gray-300 hover:text-white px-3 py-1.5 rounded text-xs flex items-center gap-1.5 transition-colors">
+                     <i data-lucide="sparkles" class="w-3.5 h-3.5 text-brand-brightRed"></i> Practice Case
+                 </button>
+                 <button onclick="sendQuickAction('Give me an advanced Pandas forensics tip. ✨')" class="bg-brand-dark border border-brand-gray hover:border-brand-brightRed text-gray-300 hover:text-white px-3 py-1.5 rounded text-xs flex items-center gap-1.5 transition-colors">
+                     <i data-lucide="sparkles" class="w-3.5 h-3.5 text-brand-brightRed"></i> Pandas Tip
+                 </button>
+                 <button onclick="sendQuickAction('Analyze the competition rules and tell me your thoughts. ✨')" class="bg-brand-dark border border-brand-gray hover:border-brand-brightRed text-gray-300 hover:text-white px-3 py-1.5 rounded text-xs flex items-center gap-1.5 transition-colors">
+                     <i data-lucide="sparkles" class="w-3.5 h-3.5 text-brand-brightRed"></i> Rule Analysis
+                 </button>
+            </div>
+
+            <!-- Input Area -->
+            <div class="p-4 border-t border-brand-brightRed bg-black flex gap-3 items-center">
+                <span class="text-brand-brightRed font-bold">></span>
+                <input type="text" id="user-input" class="w-full bg-transparent border-none text-white focus:outline-none focus:ring-0 placeholder-gray-700" placeholder="Interrogate the AI..." onkeypress="if(event.key === 'Enter') handleUserMessage()">
+                <button onclick="handleUserMessage()" class="text-brand-brightRed hover:text-white transition-colors"><i data-lucide="send" class="w-5 h-5"></i></button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Script Logic -->
+    <script>
+        const apiKey = ""; // Execution environment injects key here
+        
+        // AI Terminal Logic
+        const aiTerminal = document.getElementById('ai-terminal');
+        const chatLog = document.getElementById('chat-log');
+        const userInput = document.getElementById('user-input');
+        const initBtn = document.getElementById('init-terminal-btn');
+        const closeBtn = document.getElementById('close-terminal-btn');
+        let isWaiting = false;
+
+        initBtn.addEventListener('click', () => {
+            aiTerminal.classList.remove('hidden');
+            if(chatLog.children.length === 0) {
+                appendMessage('system', 'CONNECTION ESTABLISHED. CHIEF INVESTIGATOR AI ONLINE.\nSTATE YOUR INQUIRY OR USE A MODULE BELOW TO PREPARE FOR THE HACKATHON.');
+            }
+        });
+
+        closeBtn.addEventListener('click', () => {
+            aiTerminal.classList.add('hidden');
+        });
+
+        function appendMessage(sender, text, isLoader = false) {
+            const msgDiv = document.createElement('div');
+            msgDiv.className = `flex ${sender === 'user' ? 'justify-end' : 'justify-start'} animate-fade-in`;
+            if (isLoader) msgDiv.id = 'loading-msg';
+            
+            const innerDiv = document.createElement('div');
+            innerDiv.className = `max-w-[85%] rounded p-3 ${sender === 'user' ? 'bg-brand-darkRed/40 border border-brand-red text-white' : 'bg-brand-gray/30 border border-brand-gray text-gray-300 font-sans tracking-wide leading-relaxed'}`;
+            
+            const header = document.createElement('div');
+            header.className = `text-xs font-bold mb-1 font-mono uppercase tracking-widest ${sender === 'user' ? 'text-brand-brightRed' : 'text-gray-500'}`;
+            header.innerText = sender === 'user' ? 'AGENT' : 'CHIEF_AI';
+            
+            const content = document.createElement('div');
+            content.innerText = text;
+            
+            innerDiv.appendChild(header);
+            innerDiv.appendChild(content);
+            msgDiv.appendChild(innerDiv);
+            chatLog.appendChild(msgDiv);
+            chatLog.scrollTop = chatLog.scrollHeight;
+            
+            if(text.includes('✨')) lucide.createIcons();
+        }
+
+        async function callGemini(promptText) {
+            const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`;
+            const systemPrompt = "You are the AI Chief Investigator for Query of Death: Debugging a Murder, a Python/Pandas data forensics competition. Speak in a gritty, cynical, cyber-noir detective tone. Keep responses brief and formatted cleanly for a terminal interface. If asked for a practice case, provide a tiny fake CSV schema/data and a mystery question they must solve using Pandas.";
+            
+            const payload = {
+                contents: [{ parts: [{ text: promptText }] }],
+                systemInstruction: { parts: [{ text: systemPrompt }] }
+            };
+
+            const sleep = ms => new Promise(r => setTimeout(r, ms));
+            const delays = [1000, 2000, 4000, 8000, 16000];
+            
+            for (let attempt = 0; attempt <= 5; attempt++) {
+                try {
+                    const response = await fetch(url, {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify(payload)
+                    });
+                    
+                    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+                    
+                    const result = await response.json();
+                    return result.candidates?.[0]?.content?.parts?.[0]?.text || "NO DATA RETURNED FROM CORE.";
+                } catch (error) {
+                    if (attempt === 5) return "CRITICAL ERROR: CONNECTION TO AI CORE LOST. PLEASE RE-INITIALIZE. (Note: API Key must be injected by environment)";
+                    await sleep(delays[attempt]);
+                }
+            }
+        }
+
+        async function handleUserMessage(presetText = null) {
+            if (isWaiting) return;
+            const text = presetText || userInput.value.trim();
+            if(!text) return;
+            
+            if (!presetText) userInput.value = '';
+            appendMessage('user', text);
+            isWaiting = true;
+            appendMessage('system', 'DECRYPTING RESPONSE...', true);
+            
+            const reply = await callGemini(text);
+            
+            const loader = document.getElementById('loading-msg');
+            if (loader) loader.remove();
+            
+            appendMessage('system', reply);
+            isWaiting = false;
+        }
+
+        function sendQuickAction(text) {
+            handleUserMessage(text);
+        }
+
+        // Initialize icons on page load
+        lucide.createIcons();
+    </script>
+    <style>
+        .animate-fade-in { animation: fadeIn 0.3s ease-out forwards; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+    </style>
+</body>
+</html>
